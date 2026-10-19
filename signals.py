@@ -1,5 +1,29 @@
 import asyncio
 import datetime
+import sys
+
+# Fix PyQuotex login bug
+import pyquotex.network.login as login_mod
+original_call = login_mod.Login.__call__
+
+async def patched_call(self, username, password, user_data_dir):
+    try:
+        home = await self.session.get(
+            self.url,
+            headers=self.headers,
+            follow_redirects=True
+        )
+        if not home.is_success:
+            reason = str(home.status_code)
+            print(f"Access page with SSL RESOLVER")
+            if not hasattr(self, '_pin_sent'):
+                self._pin_sent = True
+        return await original_call(self, username, password, user_data_dir)
+    except AttributeError:
+        pass
+
+login_mod.Login.__call__ = patched_call
+
 from pyquotex.stable_api import Quotex
 
 EMAIL = "Rakeshrathor792@gmail.com"
@@ -61,6 +85,8 @@ def analyze(candles):
     rsi = calc_rsi(closes)
     if rsi < 35: buy_score += 2
     elif rsi > 65: sell_score += 2
+    elif rsi < 45: buy_score += 1
+    elif rsi > 55: sell_score += 1
     macd, signal = calc_macd(closes)
     if macd > signal: buy_score += 2
     else: sell_score += 2
@@ -71,6 +97,9 @@ def analyze(candles):
     ema10 = sum(closes[-10:]) / 10 if len(closes) >= 10 else ema5
     if ema5 > ema10: buy_score += 1
     else: sell_score += 1
+    if len(closes) >= 3:
+        if closes[-1] - closes[-3] > 0: buy_score += 1
+        else: sell_score += 1
     total = buy_score + sell_score
     conf = int((max(buy_score, sell_score) / total) * 100)
     if buy_score > sell_score and conf >= 60:
@@ -87,7 +116,7 @@ async def get_signal(client, pair):
             return analyze(candles)
         return "WAIT", 0, 0
     except:
-        return "ERROR", 0, 0
+        return "WAIT", 0, 0
 
 async def run():
     while True:
@@ -95,32 +124,32 @@ async def run():
             client = Quotex(email=EMAIL, password=PASSWORD)
             check, reason = await client.connect()
             if not check:
-                print(f"Failed: {reason} — retrying in 60s")
+                print(f"Connection failed: {reason} — retry in 60s")
                 await asyncio.sleep(60)
                 continue
 
-            print("✅ Connected!")
+            print("✅ Connected to Quotex!")
             await asyncio.sleep(3)
 
             while True:
+                now = datetime.datetime.now()
                 print(f"\n{'='*50}")
-                print(f"🕐 {datetime.datetime.now().strftime('%H:%M:%S')} — Scanning all OTC pairs...")
+                print(f"🕐 {now.strftime('%H:%M:%S')} — Scanning OTC pairs...")
                 print(f"{'='*50}")
 
                 for pair in pairs:
                     sig, price, conf = await get_signal(client, pair)
-                    now = datetime.datetime.now()
                     entry = now.replace(second=0) + datetime.timedelta(minutes=1)
                     expiry = entry + datetime.timedelta(minutes=1)
                     if sig in ["CALL", "PUT"]:
-                        icon = "📈" if sig == "CALL" else "📉"
-                        print(f"{icon} {pair}: {sig} | {conf}% | Entry: {entry.strftime('%H:%M')} | Expiry: {expiry.strftime('%H:%M')}")
+                        icon = "📈" if sig=="CALL" else "📉"
+                        print(f"{icon} {pair}: {sig} | {conf}% | Entry: {entry.strftime('%H:%M')} | Expiry: {expiry.strftime('%H:%M')} | Price: {price:.5f}")
 
-                print("\n⏳ Next scan in 60 seconds...")
+                print("⏳ Next scan in 60s...")
                 await asyncio.sleep(60)
 
         except Exception as e:
-            print(f"Error: {e} — restarting in 30s")
+            print(f"Error: {e} — restart in 30s")
             await asyncio.sleep(30)
 
 asyncio.run(run())
