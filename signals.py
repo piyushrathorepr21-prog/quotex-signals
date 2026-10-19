@@ -15,13 +15,6 @@ pairs = [
     "USDCOP_otc", "USDEGP_otc", "USDPHP_otc",
     "USDARS_otc", "USDIDR_otc", "USDBDT_otc",
     "USDDZD_otc", "USDZAR_otc",
-    "EURUSD", "GBPUSD", "USDJPY",
-    "EURJPY", "EURGBP", "GBPJPY",
-    "AUDUSD", "USDCAD", "USDCHF",
-    "AUDJPY", "CADJPY", "CHFJPY",
-    "EURCHF", "GBPAUD", "AUDCAD",
-    "EURAUD", "EURCAD", "GBPCAD",
-    "GBPCHF", "AUDCHF", "NZDUSD",
 ]
 
 def calc_rsi(closes, period=14):
@@ -68,8 +61,6 @@ def analyze(candles):
     rsi = calc_rsi(closes)
     if rsi < 35: buy_score += 2
     elif rsi > 65: sell_score += 2
-    elif rsi < 45: buy_score += 1
-    elif rsi > 55: sell_score += 1
     macd, signal = calc_macd(closes)
     if macd > signal: buy_score += 2
     else: sell_score += 2
@@ -80,9 +71,6 @@ def analyze(candles):
     ema10 = sum(closes[-10:]) / 10 if len(closes) >= 10 else ema5
     if ema5 > ema10: buy_score += 1
     else: sell_score += 1
-    if len(closes) >= 3:
-        if closes[-1] - closes[-3] > 0: buy_score += 1
-        else: sell_score += 1
     total = buy_score + sell_score
     conf = int((max(buy_score, sell_score) / total) * 100)
     if buy_score > sell_score and conf >= 60:
@@ -102,38 +90,37 @@ async def get_signal(client, pair):
         return "ERROR", 0, 0
 
 async def run():
-    client = Quotex(email=EMAIL, password=PASSWORD)
-    check, reason = await client.connect()
-    if not check:
-        print(f"Failed: {reason}")
-        return
-    print("Connected!")
-    await asyncio.sleep(3)
     while True:
-        print("\nPairs:")
-        for i, p in enumerate(pairs):
-            print(f"{i+1}. {p}")
-        print("0. Exit")
-        choice = input("Pair number: ")
-        if choice == "0":
-            break
         try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(pairs):
-                pair = pairs[idx]
-                sig, price, conf = await get_signal(client, pair)
-                now = datetime.datetime.now()
-                entry = now.replace(second=0) + datetime.timedelta(minutes=1)
-                expiry = entry + datetime.timedelta(minutes=1)
-                icon = "CALL" if sig=="CALL" else "PUT" if sig=="PUT" else "WAIT"
-                print(f"\nPAIR: {pair}")
-                print(f"SIGNAL: {icon}")
-                print(f"CONFIDENCE: {conf}%")
-                print(f"PRICE: {price:.5f}")
-                print(f"ENTRY: {entry.strftime('%H:%M:%S')}")
-                print(f"EXPIRY: {expiry.strftime('%H:%M:%S')}")
-        except:
-            print("Galat input!")
-    await client.close()
+            client = Quotex(email=EMAIL, password=PASSWORD)
+            check, reason = await client.connect()
+            if not check:
+                print(f"Failed: {reason} — retrying in 60s")
+                await asyncio.sleep(60)
+                continue
+
+            print("✅ Connected!")
+            await asyncio.sleep(3)
+
+            while True:
+                print(f"\n{'='*50}")
+                print(f"🕐 {datetime.datetime.now().strftime('%H:%M:%S')} — Scanning all OTC pairs...")
+                print(f"{'='*50}")
+
+                for pair in pairs:
+                    sig, price, conf = await get_signal(client, pair)
+                    now = datetime.datetime.now()
+                    entry = now.replace(second=0) + datetime.timedelta(minutes=1)
+                    expiry = entry + datetime.timedelta(minutes=1)
+                    if sig in ["CALL", "PUT"]:
+                        icon = "📈" if sig == "CALL" else "📉"
+                        print(f"{icon} {pair}: {sig} | {conf}% | Entry: {entry.strftime('%H:%M')} | Expiry: {expiry.strftime('%H:%M')}")
+
+                print("\n⏳ Next scan in 60 seconds...")
+                await asyncio.sleep(60)
+
+        except Exception as e:
+            print(f"Error: {e} — restarting in 30s")
+            await asyncio.sleep(30)
 
 asyncio.run(run())
