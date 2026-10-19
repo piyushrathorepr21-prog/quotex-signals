@@ -1,29 +1,5 @@
 import asyncio
 import datetime
-import sys
-
-# Fix PyQuotex login bug
-import pyquotex.network.login as login_mod
-original_call = login_mod.Login.__call__
-
-async def patched_call(self, username, password, user_data_dir):
-    try:
-        home = await self.session.get(
-            self.url,
-            headers=self.headers,
-            follow_redirects=True
-        )
-        if not home.is_success:
-            reason = str(home.status_code)
-            print(f"Access page with SSL RESOLVER")
-            if not hasattr(self, '_pin_sent'):
-                self._pin_sent = True
-        return await original_call(self, username, password, user_data_dir)
-    except AttributeError:
-        pass
-
-login_mod.Login.__call__ = patched_call
-
 from pyquotex.stable_api import Quotex
 
 EMAIL = "Rakeshrathor792@gmail.com"
@@ -122,19 +98,32 @@ async def run():
     while True:
         try:
             client = Quotex(email=EMAIL, password=PASSWORD)
-            check, reason = await client.connect()
-            if not check:
-                print(f"Connection failed: {reason} — retry in 60s")
+            
+            # Safe connect
+            try:
+                result = await client.connect()
+                if result is None:
+                    print("Connect returned None - retry in 60s")
+                    await asyncio.sleep(60)
+                    continue
+                check, reason = result
+            except Exception as e:
+                print(f"Connect error: {e} - retry in 60s")
                 await asyncio.sleep(60)
                 continue
 
-            print("✅ Connected to Quotex!")
+            if not check:
+                print(f"Failed: {reason} - retry in 60s")
+                await asyncio.sleep(60)
+                continue
+
+            print("✅ Connected!")
             await asyncio.sleep(3)
 
             while True:
                 now = datetime.datetime.now()
                 print(f"\n{'='*50}")
-                print(f"🕐 {now.strftime('%H:%M:%S')} — Scanning OTC pairs...")
+                print(f"🕐 {now.strftime('%H:%M:%S')} Scanning...")
                 print(f"{'='*50}")
 
                 for pair in pairs:
@@ -143,13 +132,13 @@ async def run():
                     expiry = entry + datetime.timedelta(minutes=1)
                     if sig in ["CALL", "PUT"]:
                         icon = "📈" if sig=="CALL" else "📉"
-                        print(f"{icon} {pair}: {sig} | {conf}% | Entry: {entry.strftime('%H:%M')} | Expiry: {expiry.strftime('%H:%M')} | Price: {price:.5f}")
+                        print(f"{icon} {pair}: {sig} | {conf}% | {entry.strftime('%H:%M')}-{expiry.strftime('%H:%M')} | {price:.5f}")
 
                 print("⏳ Next scan in 60s...")
                 await asyncio.sleep(60)
 
         except Exception as e:
-            print(f"Error: {e} — restart in 30s")
+            print(f"Error: {e} - restart in 30s")
             await asyncio.sleep(30)
 
 asyncio.run(run())
