@@ -1,3 +1,4 @@
+import fix
 # Permanent fix for PyQuotex bug
 import httpx
 if not hasattr(httpx.Response, 'reason_phrase'):
