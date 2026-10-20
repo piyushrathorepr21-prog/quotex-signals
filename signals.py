@@ -1,3 +1,8 @@
+# Permanent fix for PyQuotex bug
+import httpx
+if not hasattr(httpx.Response, 'reason_phrase'):
+    httpx.Response.reason_phrase = property(lambda self: str(self.status_code))
+
 import asyncio
 import datetime
 from pyquotex.stable_api import Quotex
@@ -98,8 +103,6 @@ async def run():
     while True:
         try:
             client = Quotex(email=EMAIL, password=PASSWORD)
-            
-            # Safe connect
             try:
                 result = await client.connect()
                 if result is None:
@@ -117,13 +120,13 @@ async def run():
                 await asyncio.sleep(60)
                 continue
 
-            print("✅ Connected!")
+            print("✅ Connected to Quotex!")
             await asyncio.sleep(3)
 
             while True:
                 now = datetime.datetime.now()
                 print(f"\n{'='*50}")
-                print(f"🕐 {now.strftime('%H:%M:%S')} Scanning...")
+                print(f"🕐 {now.strftime('%H:%M:%S')} Scanning OTC pairs...")
                 print(f"{'='*50}")
 
                 for pair in pairs:
