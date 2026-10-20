@@ -1,8 +1,17 @@
-import pyquotex.network.login as m
-import re, pathlib
+import pathlib, importlib
 
-f = pathlib.Path(m.__file__)
-code = f.read_text()
-code = code.replace("home.reason_phrase", "str(home.status_code)")
-f.write_text(code)
-print("Fixed!")
+# Find and fix all pyquotex files
+import pyquotex
+pkg_dir = pathlib.Path(pyquotex.__file__).parent
+
+for py_file in pkg_dir.rglob("*.py"):
+    try:
+        code = py_file.read_text()
+        if "reason_phrase" in code:
+            fixed = code.replace("home.reason_phrase", "str(home.status_code)")
+            py_file.write_text(fixed)
+            print(f"Fixed: {py_file.name}")
+    except:
+        pass
+
+print("All files patched!")
