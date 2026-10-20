@@ -1,1 +1,1 @@
-worker: python signals.py
+worker: python fix.py && python signals.py
