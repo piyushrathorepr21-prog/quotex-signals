@@ -144,5 +144,21 @@ async def run():
         except Exception as e:
             print(f"Error: {e} - restart in 30s")
             await asyncio.sleep(30)
+# Keep web service alive
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Signals running!")
+    def log_message(self, *args):
+        pass
+
+def start_server():
+    server = HTTPServer(('0.0.0.0', 10000), Handler)
+    server.serve_forever()
+
+threading.Thread(target=start_server, daemon=True).start()
 asyncio.run(run())
